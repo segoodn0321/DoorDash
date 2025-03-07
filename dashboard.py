@@ -6,7 +6,7 @@ import jwt.utils
 import time
 import math
 
-accessKey = 9470937d-e624-4730-ab81-00cade3edbd3
+accessKey = '9470937d-e624-4730-ab81-00cade3edbd3'
 
 token = jwt.encode(
     {
