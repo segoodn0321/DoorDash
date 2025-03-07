@@ -24,7 +24,7 @@ def get_weather(zip_code, api_key):
 
 # Fetch real-time traffic data from HERE API
 def get_traffic_data(lat, lon, api_key):
-    url = f"https://traffic.ls.hereapi.com/traffic/6.3/flow.json?prox={lat},{lon},1000&apiKey={api_key}"
+    url = f"https://router.hereapi.com/v8/routes?transportMode=car&origin={lat},{lon}&destination={lat},{lon}&return=summary&apikey={api_key}"
     try:
         response = requests.get(url)
         response.raise_for_status()
