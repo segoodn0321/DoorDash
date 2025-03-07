@@ -3,7 +3,7 @@ import requests
 from datetime import datetime
 
 # API Key configuration (replace with your key)
-WEATHER_API_KEY = 'your_openweathermap_api_key'
+WEATHER_API_KEY = '28228f6dd7c6a9b575000a82351d4d0c'
 
 # Fetch weather information for a given zip code
 def get_weather(zip_code):
