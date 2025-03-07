@@ -32,7 +32,7 @@ def recommend_earning_mode(current_hour, weather):
     return mode
 
 # Streamlit UI
-st.title("🚗 DoorDash Earnings Optimizer")
+st.title("🚗 Kyle-Dash Earnings Optimizer")
 
 zip_code = st.text_input("Enter Zip Code:", "28409")
 
