@@ -69,4 +69,3 @@ if st.button("Analyze"):
     st.subheader("🕑 Current Local Time")
     st.write(f"{datetime.now().strftime('%H:%M')}")
 
-    recommendation = recommend_earning_mode(datetime.no
