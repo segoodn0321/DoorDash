@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- Configuration ---
-WEATHER_API_KEY = '28228f6dd7c6a9b575000a82351d4d0c'  # Replace with your actual API key
+WEATHER_API_KEY = '8a0599888629317497a67f540215a4fc'  # Replace with your actual API key
 ZIP_CODE = '28401'
 
 # --- Historical Data (Replace with your actual data) ---
