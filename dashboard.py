@@ -5,7 +5,7 @@ from datetime import datetime
 
 # --- Configuration ---
 WEATHER_API_KEY = '28228f6dd7c6a9b575000a82351d4d0c'  # Replace with your actual API key
-ZIP_CODE = '28409'
+ZIP_CODE = '28401'
 
 # --- Historical Data (Replace with your actual data) ---
 historical_orders = [
@@ -38,7 +38,7 @@ def recommend_earning_mode(current_hour, peak_hour):
     return "Earn per Order 🟢" if abs(current_hour - peak_hour) <= 1 else "Earn by Time 🟡"
 
 # --- Streamlit Dashboard ---
-st.title("🚗 DoorDash Earnings Optimizer")
+st.title("🚗 Kyle's DoorDash Earnings Optimizer")
 
 with st.spinner("Fetching weather data..."):
     weather = get_weather(ZIP_CODE, WEATHER_API_KEY)
