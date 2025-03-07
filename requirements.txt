@@ -1,3 +1,5 @@
-streamlit
-requests
-PyJWT
+doordash-dashboard/
+├── dashboard.py
+├── requirements.txt
+├── runtime.txt
+└── secrets.toml (recommended)
