@@ -33,8 +33,6 @@ def recommend_earning_mode(current_hour, weather_condition):
 
     return recommendation, weather_condition
 
----
-
 ## 🛠️ **Here’s the fully corrected Streamlit Dashboard (`dashboard.py`):**
 
 ```python
