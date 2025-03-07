@@ -1,7 +1,26 @@
 import streamlit as st
 import requests
 from datetime import datetime
+from os import access
+import jwt.utils
+import time
+import math
 
+accessKey = 9470937d-e624-4730-ab81-00cade3edbd3
+
+token = jwt.encode(
+    {
+        "aud": "doordash",
+        "iss": accessKey["developer_id"],
+        "kid": accessKey["key_id"],
+        "exp": str(math.floor(time.time() + 300)),
+        "iat": str(math.floor(time.time())),
+    },
+    jwt.utils.base64url_decode(accessKey["signing_secret"]),
+    algorithm="HS256",
+    headers={"dd-ver": "DD-JWT-V1"})
+
+print(token)
 # --- API Keys ---
 WEATHER_API_KEY = '28228f6dd7c6a9b575000a82351d4d0c'
 DOORDASH_API_KEY = '9470937d-e624-4730-ab81-00cade3edbd3'
