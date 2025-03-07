@@ -4,7 +4,7 @@ from datetime import datetime
 
 # --- API Configuration ---
 WEATHER_API_KEY = '28228f6dd7c6a9b575000a82351d4d0c'
-DOORDASH_API_KEY = '9470937d-e624-4730-ab81-00cade3edbd3'
+DOORDASH_API_KEY = 'a2677a32-0908-4751-98af-cd847ab5be19'
 
 # Fetch weather and city name from OpenWeatherMap
 def get_weather_and_city(zip_code):
