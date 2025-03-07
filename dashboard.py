@@ -1,241 +1,60 @@
 import streamlit as st
 import requests
-import pandas as pd
 from datetime import datetime
 
-# --- API KEYS ---
-WEATHER_API_KEY = '8a0599888629317497a67f540215a4fc'
-DOORDASH_API_KEY = 'import streamlit as st
-import requests
-import pandas as pd
-from datetime import datetime
+# API Key configuration (replace with your key)
+WEATHER_API_KEY = 'your_openweathermap_api_key'
 
-# --- API KEYS ---
-WEATHER_API_KEY = '8a0599888629317497a67f540215a4fc'
-DOORDASH_API_KEY = 'import streamlit as st
-import requests
-import pandas as pd
-from datetime import datetime
-
-# --- API KEYS ---
-WEATHER_API_KEY = '8a0599888629317497a67f540215a4fc'
-DOORDASH_API_KEY = 'a2677a32-0908-4751-98af-cd847ab5be19'
-
-# --- Fetch Weather Data ---
+# Fetch weather information for a given zip code
 def get_weather(zip_code):
     try:
         url = f"http://api.openweathermap.org/data/2.5/weather?zip={zip_code},us&appid={WEATHER_API_KEY}&units=imperial"
         response = requests.get(url)
         response.raise_for_status()
-        weather_data = response.json()
-        condition = weather_data['weather'][0]['main']
-        temp = weather_data['main']['temp']
-        return f"{condition}, {temp}°F"
-    except requests.RequestException as e:
-        return f"Weather API Error: {e}"
-
-# --- Fetch DoorDash Data ---
-def fetch_doordash_data(zip_code):
-    headers = {'Authorization': f'Bearer {DOORDASH_API_KEY}'}
-    url = f'https://api.doordash.com/v1/market/{zip_code}/order_volume'
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
         data = response.json()
-        return data.get('hourly_orders', [])
-    except requests.RequestException as e:
-        st.error(f"DoorDash API Error: {e}")
-        return []
+        condition = data['weather'][0]['main']
+        temperature = data['main']['temp']
+        return f"{condition}, {temperature}°F"
+    except Exception as e:
+        return f"Unable to fetch weather ({e})"
 
-# --- Analyze Peak Hours ---
-def analyze_peak_hours(hourly_orders):
-    if not hourly_orders:
-        return None
-    df = pd.DataFrame(hourly_orders)
-    df['time'] = pd.to_datetime(df['time'])
-    peak_hour = df.groupby(df['time'].dt.hour)['orders'].sum().idxmax()
-    return peak_hour
+# Simple recommendation based on common DoorDash peak hours
+def recommend_earning_mode(current_hour, weather_condition):
+    # Peak meal times typically good for 'Earn per Order'
+    if (11 <= current_hour <= 14) or (17 <= current_hour <= 21):
+        mode = "Earn per Order"
+    else:
+        mode = "Earn by Time"
+    
+    # Adjust recommendation if weather is unfavorable
+    if weather_condition in ['Rain', 'Snow', 'Thunderstorm']:
+        mode_note = f"High demand likely due to {weather_condition}, strongly consider 'Earn per Order'."
+    else:
+        mode_note = "Typical demand conditions."
 
-# --- Recommend Earning Mode ---
-def recommend_earning_mode(current_hour, peak_hour):
-    if peak_hour is None:
-        return "Insufficient data to recommend earning mode."
-    return "Earn per Order" if abs(current_hour - peak_hour) <= 1 else "Earn by Time"
+    return mode_note, mode_note
 
-# --- Streamlit Dashboard ---
+# Streamlit App Interface
 st.title("🚗 DoorDash Earnings Optimizer")
 
-zip_code = st.text_input("Enter Zip Code:", "28409")
+zip_code = st.text_input("Enter Zip Code:", value="28409")
 
 if st.button("Search"):
-    with st.spinner("Fetching data..."):
-        weather_info = get_weather(zip_code)
-        hourly_orders = fetch_doordash_data(zip_code)
-        peak_hour = analyze_peak_hours(hourly_orders)
-        current_hour = datetime.now().hour
-        recommendation = recommend_earning_mode(current_hour, peak_hour)
+    current_hour = datetime.now().hour
+    weather = get_weather(zip_code)
 
-    # --- Results Display ---
-    st.subheader(f"📍 Weather in {zip_code}")
-    st.info(weather_info)
+    mode, note = recommend_earning_mode(current_hour, weather)
 
-    st.subheader("📈 DoorDash Peak Hour")
-    if peak_hour is not None:
-        st.metric(label="Peak Order Hour", value=f"{peak_hour}:00")
-    else:
-        st.warning("No historical DoorDash data available for this location.")
+    st.subheader(f"📍 Current Weather in {zip_code}")
+    st.info(weather)
 
-    st.subheader("🕑 Current Time")
+    st.subheader("🕑 Current Local Time")
     st.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    st.subheader("💰 Recommended Earning Mode")
-    if "Insufficient data" in recommendation:
-        st.error(recommendation)
+    st.subheader("💡 Earning Mode Recommendation")
+    if "Unable to fetch" in weather:
+        st.error("Cannot determine recommendation without weather data.")
     else:
-        st.success(recommendation)'
+        st.success(mode_note)
 
-# --- Fetch Weather Data ---
-def get_weather(zip_code):
-    try:
-        url = f"http://api.openweathermap.org/data/2.5/weather?zip={zip_code},us&appid={WEATHER_API_KEY}&units=imperial"
-        response = requests.get(url)
-        response.raise_for_status()
-        weather_data = response.json()
-        condition = weather_data['weather'][0]['main']
-        temp = weather_data['main']['temp']
-        return f"{condition}, {temp}°F"
-    except requests.RequestException as e:
-        return f"Weather API Error: {e}"
-
-# --- Fetch DoorDash Data ---
-def fetch_doordash_data(zip_code):
-    headers = {'Authorization': f'Bearer {DOORDASH_API_KEY}'}
-    url = f'https://api.doordash.com/v1/market/{zip_code}/order_volume'
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        return data.get('hourly_orders', [])
-    except requests.RequestException as e:
-        st.error(f"DoorDash API Error: {e}")
-        return []
-
-# --- Analyze Peak Hours ---
-def analyze_peak_hours(hourly_orders):
-    if not hourly_orders:
-        return None
-    df = pd.DataFrame(hourly_orders)
-    df['time'] = pd.to_datetime(df['time'])
-    peak_hour = df.groupby(df['time'].dt.hour)['orders'].sum().idxmax()
-    return peak_hour
-
-# --- Recommend Earning Mode ---
-def recommend_earning_mode(current_hour, peak_hour):
-    if peak_hour is None:
-        return "Insufficient data to recommend earning mode."
-    return "Earn per Order" if abs(current_hour - peak_hour) <= 1 else "Earn by Time"
-
-# --- Streamlit Dashboard ---
-st.title("🚗 DoorDash Earnings Optimizer")
-
-zip_code = st.text_input("Enter Zip Code:", "28409")
-
-if st.button("Search"):
-    with st.spinner("Fetching data..."):
-        weather_info = get_weather(zip_code)
-        hourly_orders = fetch_doordash_data(zip_code)
-        peak_hour = analyze_peak_hours(hourly_orders)
-        current_hour = datetime.now().hour
-        recommendation = recommend_earning_mode(current_hour, peak_hour)
-
-    # --- Results Display ---
-    st.subheader(f"📍 Weather in {zip_code}")
-    st.info(weather_info)
-
-    st.subheader("📈 DoorDash Peak Hour")
-    if peak_hour is not None:
-        st.metric(label="Peak Order Hour", value=f"{peak_hour}:00")
-    else:
-        st.warning("No historical DoorDash data available for this location.")
-
-    st.subheader("🕑 Current Time")
-    st.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    st.subheader("💰 Recommended Earning Mode")
-    if "Insufficient data" in recommendation:
-        st.error(recommendation)
-    else:
-        st.success(recommendation)'
-
-# --- Fetch Weather Data ---
-def get_weather(zip_code):
-    try:
-        url = f"http://api.openweathermap.org/data/2.5/weather?zip={zip_code},us&appid={WEATHER_API_KEY}&units=imperial"
-        response = requests.get(url)
-        response.raise_for_status()
-        weather_data = response.json()
-        condition = weather_data['weather'][0]['main']
-        temp = weather_data['main']['temp']
-        return f"{condition}, {temp}°F"
-    except requests.RequestException as e:
-        return f"Weather API Error: {e}"
-
-# --- Fetch DoorDash Data ---
-def fetch_doordash_data(zip_code):
-    headers = {'Authorization': f'Bearer {DOORDASH_API_KEY}'}
-    url = f'https://api.doordash.com/v1/market/{zip_code}/order_volume'
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        return data.get('hourly_orders', [])
-    except requests.RequestException as e:
-        st.error(f"DoorDash API Error: {e}")
-        return []
-
-# --- Analyze Peak Hours ---
-def analyze_peak_hours(hourly_orders):
-    if not hourly_orders:
-        return None
-    df = pd.DataFrame(hourly_orders)
-    df['time'] = pd.to_datetime(df['time'])
-    peak_hour = df.groupby(df['time'].dt.hour)['orders'].sum().idxmax()
-    return peak_hour
-
-# --- Recommend Earning Mode ---
-def recommend_earning_mode(current_hour, peak_hour):
-    if peak_hour is None:
-        return "Insufficient data to recommend earning mode."
-    return "Earn per Order" if abs(current_hour - peak_hour) <= 1 else "Earn by Time"
-
-# --- Streamlit Dashboard ---
-st.title("🚗 DoorDash Earnings Optimizer")
-
-zip_code = st.text_input("Enter Zip Code:", "28409")
-
-if st.button("Search"):
-    with st.spinner("Fetching data..."):
-        weather_info = get_weather(zip_code)
-        hourly_orders = fetch_doordash_data(zip_code)
-        peak_hour = analyze_peak_hours(hourly_orders)
-        current_hour = datetime.now().hour
-        recommendation = recommend_earning_mode(current_hour, peak_hour)
-
-    # --- Results Display ---
-    st.subheader(f"📍 Weather in {zip_code}")
-    st.info(weather_info)
-
-    st.subheader("📈 DoorDash Peak Hour")
-    if peak_hour is not None:
-        st.metric(label="Peak Order Hour", value=f"{peak_hour}:00")
-    else:
-        st.warning("No historical DoorDash data available for this location.")
-
-    st.subheader("🕑 Current Time")
-    st.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    st.subheader("💰 Recommended Earning Mode")
-    if "Insufficient data" in recommendation:
-        st.error(recommendation)
-    else:
-        st.success(recommendation)
+        st.write(f"**Reasoning:** {mode_note}")
