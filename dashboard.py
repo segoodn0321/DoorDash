@@ -6,50 +6,54 @@ import joblib
 import bcrypt
 import os
 import pytz
-import json
+import sqlite3
 from sklearn.ensemble import RandomForestRegressor
 
-# File to store user credentials
-USER_CREDENTIALS_FILE = "user_credentials.json"
+# Database setup for secure storage
+DB_FILE = "user_data.db"
 
-# Load or create user credentials database
-def load_user_credentials():
-    if os.path.exists(USER_CREDENTIALS_FILE):
-        with open(USER_CREDENTIALS_FILE, "r") as file:
-            return json.load(file)
-    return {}
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-# Save user credentials
-def save_user_credentials(credentials):
-    with open(USER_CREDENTIALS_FILE, "w") as file:
-        json.dump(credentials, file)
-
-# Register a new user
 def register_user(username, password):
-    credentials = load_user_credentials()
-
-    if username in credentials:
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    # Check if user exists
+    c.execute("SELECT * FROM users WHERE username = ?", (username,))
+    if c.fetchone():
+        conn.close()
         return False, "Username already exists!"
 
-    hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    credentials[username] = hashed_password
-    save_user_credentials(credentials)
-
+    # Securely hash the password before storing it
+    hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed_password))
+    conn.commit()
+    conn.close()
+    
     return True, "✅ Account created successfully! Please log in."
 
-# Authenticate user
 def login_user(username, password):
-    credentials = load_user_credentials()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
 
-    if username not in credentials:
-        return False, "❌ Username not found. Please register first."
+    c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+    result = c.fetchone()
+    conn.close()
 
-    stored_hash = credentials[username].encode()
-
-    if bcrypt.checkpw(password.encode(), stored_hash):
+    if result and bcrypt.checkpw(password.encode(), result[0]):
         return True, "✅ Login successful!"
-
-    return False, "❌ Incorrect password."
+    
+    return False, "❌ Incorrect username or password."
 
 # Auto-detect user location and timezone
 @st.cache_data
@@ -144,6 +148,9 @@ def predict_best_time(username):
 # Streamlit UI
 st.title("🚗 DoorDash AI Driver Assistant")
 st.subheader(f"📍 Location: {CITY}, Timezone: {USER_TIMEZONE}")
+
+# Initialize database
+init_db()
 
 # Login/Register System
 if "username" not in st.session_state:
