@@ -10,31 +10,31 @@ from sklearn.ensemble import RandomForestRegressor
 # Constants
 EARNINGS_FILE = "driver_earnings.csv"
 
-# Auto-detect user location and timezone
-@st.cache_data
-def get_location():
-    response = requests.get("https://ipinfo.io/json").json()
-    city = response.get("city", "Unknown City")
-    lat, lon = response["loc"].split(",")
-    timezone = response.get("timezone", "UTC")
-    return city, lat, lon, timezone
+# **Auto-detect user’s actual location**
+def get_actual_location():
+    try:
+        response = requests.get("https://ipinfo.io/json").json()
+        city = response.get("city", "Unknown City")
+        lat, lon = response["loc"].split(",")
+        timezone = response.get("timezone", "UTC")
+        return city, lat, lon, timezone
+    except Exception:
+        return "Unknown City", "0", "0", "UTC"
 
-CITY, LATITUDE, LONGITUDE, USER_TIMEZONE = get_location()
+CITY, LATITUDE, LONGITUDE, USER_TIMEZONE = get_actual_location()
 LOCAL_TZ = pytz.timezone(USER_TIMEZONE)
 
 # API Keys (Replace with your own)
 OPENWEATHER_API_KEY = "your_openweather_api_key"
 GOOGLE_MAPS_API_KEY = "your_google_maps_api_key"
 
-# Fetch real-time weather data
-@st.cache_data
+# **Fetch live weather for user’s actual location**
 def get_weather():
     url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid={OPENWEATHER_API_KEY}&units=imperial"
     response = requests.get(url).json()
     return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
 
-# Fetch real-time traffic data
-@st.cache_data
+# **Fetch live traffic for user’s location**
 def get_traffic():
     url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={LATITUDE},{LONGITUDE}&destinations={LATITUDE},{LONGITUDE}&departure_time=now&key={GOOGLE_MAPS_API_KEY}"
     response = requests.get(url).json()
@@ -43,16 +43,15 @@ def get_traffic():
     except KeyError:
         return "Unknown"
 
-# Load earnings data
+# **Load earnings data**
 def load_earnings_data():
     if os.path.exists(EARNINGS_FILE):
         return pd.read_csv(EARNINGS_FILE)
     return pd.DataFrame(columns=["date", "start_hour", "end_hour", "earnings", "weather", "traffic"])
 
-# Save earnings data
+# **Save earnings data**
 def save_earnings_data(start_time, end_time, earnings):
     df = load_earnings_data()
-
     date = datetime.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     weather, temp, wind = get_weather()
     traffic = get_traffic()
@@ -69,7 +68,7 @@ def save_earnings_data(start_time, end_time, earnings):
     df = pd.concat([df, new_data], ignore_index=True)
     df.to_csv(EARNINGS_FILE, index=False)
 
-# Train AI model
+# **Train AI model**
 def train_model():
     df = load_earnings_data()
     if len(df) < 10:
@@ -85,7 +84,7 @@ def train_model():
     joblib.dump(model, "earnings_predictor.pkl")
     return "✅ AI model trained successfully!"
 
-# Predict best time to drive
+# **Predict best time to drive**
 def predict_best_time():
     try:
         model = joblib.load("earnings_predictor.pkl")
@@ -100,9 +99,9 @@ def predict_best_time():
 
     return max(predictions, key=lambda x: x[1])
 
-# Streamlit UI
+# **Streamlit UI**
 st.title("🚗 DoorDash AI Driver Assistant")
-st.subheader(f"📍 Location: {CITY}, Timezone: {USER_TIMEZONE}")
+st.subheader(f"📍 Current Location: {CITY}, Timezone: {USER_TIMEZONE}")
 
 start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
 end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
