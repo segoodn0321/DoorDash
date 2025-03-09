@@ -6,47 +6,50 @@ import joblib
 import bcrypt
 import os
 import pytz
+import json
 from sklearn.ensemble import RandomForestRegressor
 
 # File to store user credentials
 USER_CREDENTIALS_FILE = "user_credentials.json"
 
-# Load user credentials
+# Load or create user credentials database
 def load_user_credentials():
     if os.path.exists(USER_CREDENTIALS_FILE):
-        return pd.read_json(USER_CREDENTIALS_FILE, orient="index")
-    return pd.DataFrame(columns=["username", "password"])
+        with open(USER_CREDENTIALS_FILE, "r") as file:
+            return json.load(file)
+    return {}
 
 # Save user credentials
-def save_user_credentials(credentials_df):
-    credentials_df.to_json(USER_CREDENTIALS_FILE, orient="index")
+def save_user_credentials(credentials):
+    with open(USER_CREDENTIALS_FILE, "w") as file:
+        json.dump(credentials, file)
 
 # Register a new user
 def register_user(username, password):
-    credentials_df = load_user_credentials()
-    
-    if username in credentials_df.index:
+    credentials = load_user_credentials()
+
+    if username in credentials:
         return False, "Username already exists!"
-    
+
     hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    credentials_df.loc[username] = [hashed_password]
-    save_user_credentials(credentials_df)
-    
-    return True, "Account created successfully! Please log in."
+    credentials[username] = hashed_password
+    save_user_credentials(credentials)
+
+    return True, "✅ Account created successfully! Please log in."
 
 # Authenticate user
 def login_user(username, password):
-    credentials_df = load_user_credentials()
-    
-    if username not in credentials_df.index:
-        return False, "Username not found. Please register first."
+    credentials = load_user_credentials()
 
-    stored_hash = credentials_df.loc[username, "password"].encode()
-    
+    if username not in credentials:
+        return False, "❌ Username not found. Please register first."
+
+    stored_hash = credentials[username].encode()
+
     if bcrypt.checkpw(password.encode(), stored_hash):
-        return True, "Login successful!"
-    
-    return False, "Incorrect password."
+        return True, "✅ Login successful!"
+
+    return False, "❌ Incorrect password."
 
 # Auto-detect user location and timezone
 @st.cache_data
@@ -81,10 +84,6 @@ def get_traffic():
     except KeyError:
         return "Unknown"
 
-# Get current local time
-def get_local_time():
-    return datetime.datetime.now(LOCAL_TZ).strftime("%I:%M %p")
-
 # Load user-specific earnings data
 def load_earnings_data(username):
     file_path = f"{username}_earnings.csv"
@@ -115,8 +114,8 @@ def save_earnings_data(username, start_time, end_time, earnings):
 # Train AI model per user
 def train_model(username):
     df = load_earnings_data(username)
-    if len(df) < 20:
-        return "Not enough data to train AI model. Keep logging shifts."
+    if len(df) < 10:
+        return "❌ Not enough data to train AI model. Log more shifts first."
 
     df["start_hour"] = pd.to_datetime(df["start_hour"], format="%I:%M %p").dt.hour
     df["weather_score"] = df["weather"].apply(lambda x: 1 if "rain" in x.lower() else 0)
@@ -133,7 +132,7 @@ def predict_best_time(username):
     try:
         model = joblib.load(f"{username}_predictor.pkl")
     except FileNotFoundError:
-        return "AI model not trained yet. Log more shifts first."
+        return "❌ AI model not trained yet. Log more shifts first."
 
     hours = list(range(10, 23))
     weather, temp, wind = get_weather()
@@ -146,40 +145,45 @@ def predict_best_time(username):
 st.title("🚗 DoorDash AI Driver Assistant")
 st.subheader(f"📍 Location: {CITY}, Timezone: {USER_TIMEZONE}")
 
-# Login/Register
-username = st.text_input("Username")
-password = st.text_input("Password", type="password")
-if st.button("Login"):
-    success, message = login_user(username, password)
-    if success:
-        st.session_state["username"] = username
-        st.experimental_rerun()
-    else:
-        st.error(message)
-
-if st.button("Register"):
-    success, message = register_user(username, password)
-    if success:
-        st.success(message)
-    else:
-        st.error(message)
+# Login/Register System
+if "username" not in st.session_state:
+    tab1, tab2 = st.tabs(["Login", "Register"])
+    
+    with tab1:
+        username = st.text_input("Username", key="login_user")
+        password = st.text_input("Password", type="password", key="login_pass")
+        if st.button("Login"):
+            success, message = login_user(username, password)
+            if success:
+                st.session_state["username"] = username
+                st.experimental_rerun()
+            else:
+                st.error(message)
+    
+    with tab2:
+        new_username = st.text_input("New Username", key="reg_user")
+        new_password = st.text_input("New Password", type="password", key="reg_pass")
+        if st.button("Register"):
+            success, message = register_user(new_username, new_password)
+            if success:
+                st.success(message)
+            else:
+                st.error(message)
 
 # After login
 if "username" in st.session_state:
     st.success(f"Welcome, {st.session_state['username']}!")
 
-    # Logging earnings
     start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
     end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
     earnings = st.number_input("Total Earnings ($)", min_value=0.0)
+
     if st.button("Log Shift"):
         save_earnings_data(st.session_state["username"], start_time, end_time, earnings)
         st.success("Shift logged successfully!")
 
-    # Train AI
     if st.button("Train AI Model"):
         st.success(train_model(st.session_state["username"]))
 
-    # Best time prediction
     if st.button("Check Best Time to Drive"):
         st.success(f"📊 Best time to drive: {predict_best_time(st.session_state['username'])}")
