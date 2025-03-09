@@ -14,14 +14,17 @@ EARNINGS_FILE = "driver_earnings.csv"
 st.title("🚗 DoorDash AI Driver Assistant")
 zip_code = st.text_input("Enter your ZIP code (5 digits):", max_chars=5)
 
-# **Fetch latitude & longitude based on ZIP code**
+# **Fetch latitude & longitude using Google Maps API (more reliable)**
 def get_lat_lon(zip_code):
     try:
-        url = f"http://api.openweathermap.org/geo/1.0/zip?zip={zip_code},US&appid=your_openweather_api_key"
+        url = f"https://maps.googleapis.com/maps/api/geocode/json?address={zip_code},US&key=your_google_maps_api_key"
         response = requests.get(url).json()
-        return response["lat"], response["lon"]
-    except:
-        return None, None
+        if "results" in response and len(response["results"]) > 0:
+            location = response["results"][0]["geometry"]["location"]
+            return location["lat"], location["lng"]
+    except Exception as e:
+        print("Error fetching lat/lon:", e)
+    return None, None
 
 LATITUDE, LONGITUDE = None, None
 if zip_code:
@@ -29,14 +32,14 @@ if zip_code:
     if LATITUDE and LONGITUDE:
         st.success(f"🌍 Location detected! Using ZIP code {zip_code}")
     else:
-        st.error("⚠️ Invalid ZIP code. Please try again.")
+        st.error("⚠️ Invalid ZIP code or API issue. Please try again.")
 
 # **Get timezone based on ZIP code**
 def get_timezone(lat, lon):
     try:
         url = f"https://maps.googleapis.com/maps/api/timezone/json?location={lat},{lon}&timestamp={int(datetime.datetime.utcnow().timestamp())}&key=your_google_maps_api_key"
         response = requests.get(url).json()
-        return response["timeZoneId"]
+        return response.get("timeZoneId", "UTC")
     except:
         return "UTC"
 
@@ -52,7 +55,8 @@ def get_weather():
     if LATITUDE and LONGITUDE:
         url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid=your_openweather_api_key&units=imperial"
         response = requests.get(url).json()
-        return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
+        if "weather" in response:
+            return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
     return "Unknown", "N/A", "N/A"
 
 # **Fetch real-time traffic for user's ZIP code**
