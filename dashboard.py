@@ -7,9 +7,9 @@ import pytz
 import os
 from sklearn.ensemble import RandomForestRegressor
 
-# **🔑 Replace with Your API Keys**
-HERE_API_KEY = "your_here_api_key"  # Get it from HERE Developer Portal
-OPENWEATHER_API_KEY = "your_openweather_api_key"  # Get it from OpenWeatherMap
+# **🔑 API KEYS**
+HERE_API_KEY = "your_here_api_key"  
+OPENWEATHER_API_KEY = "your_openweather_api_key"
 
 # Constants
 EARNINGS_FILE = "driver_earnings.csv"
@@ -151,7 +151,7 @@ def predict_best_time():
 
 # **Streamlit UI**
 if zip_code and LATITUDE and LONGITUDE:
-    st.subheader(f"📍 Location based on ZIP code: {zip_code}, Timezone: {USER_TIMEZONE}")
+    st.subheader(f"📍 Location: {zip_code}, Timezone: {USER_TIMEZONE}")
 
     start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
     end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
@@ -166,4 +166,4 @@ if zip_code and LATITUDE and LONGITUDE:
 
     if st.button("Check Best Time to Drive"):
         st.success(f"📊 Best time to drive: {predict_best_time()}")
-    
+        
