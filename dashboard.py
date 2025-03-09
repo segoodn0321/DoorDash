@@ -3,57 +3,12 @@ import requests
 import datetime
 import pandas as pd
 import joblib
-import bcrypt
-import os
 import pytz
-import sqlite3
+import os
 from sklearn.ensemble import RandomForestRegressor
 
-# Database setup for secure storage
-DB_FILE = "user_data.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password_hash TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def register_user(username, password):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    
-    # Check if user exists
-    c.execute("SELECT * FROM users WHERE username = ?", (username,))
-    if c.fetchone():
-        conn.close()
-        return False, "Username already exists!"
-
-    # Securely hash the password before storing it
-    hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-    c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed_password))
-    conn.commit()
-    conn.close()
-    
-    return True, "✅ Account created successfully! Please log in."
-
-def login_user(username, password):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-
-    c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
-    result = c.fetchone()
-    conn.close()
-
-    if result and bcrypt.checkpw(password.encode(), result[0]):
-        return True, "✅ Login successful!"
-    
-    return False, "❌ Incorrect username or password."
+# Constants
+EARNINGS_FILE = "driver_earnings.csv"
 
 # Auto-detect user location and timezone
 @st.cache_data
@@ -88,16 +43,15 @@ def get_traffic():
     except KeyError:
         return "Unknown"
 
-# Load user-specific earnings data
-def load_earnings_data(username):
-    file_path = f"{username}_earnings.csv"
-    if os.path.exists(file_path):
-        return pd.read_csv(file_path)
+# Load earnings data
+def load_earnings_data():
+    if os.path.exists(EARNINGS_FILE):
+        return pd.read_csv(EARNINGS_FILE)
     return pd.DataFrame(columns=["date", "start_hour", "end_hour", "earnings", "weather", "traffic"])
 
 # Save earnings data
-def save_earnings_data(username, start_time, end_time, earnings):
-    df = load_earnings_data(username)
+def save_earnings_data(start_time, end_time, earnings):
+    df = load_earnings_data()
 
     date = datetime.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     weather, temp, wind = get_weather()
@@ -113,11 +67,11 @@ def save_earnings_data(username, start_time, end_time, earnings):
     }])
 
     df = pd.concat([df, new_data], ignore_index=True)
-    df.to_csv(f"{username}_earnings.csv", index=False)
+    df.to_csv(EARNINGS_FILE, index=False)
 
-# Train AI model per user
-def train_model(username):
-    df = load_earnings_data(username)
+# Train AI model
+def train_model():
+    df = load_earnings_data()
     if len(df) < 10:
         return "❌ Not enough data to train AI model. Log more shifts first."
 
@@ -128,19 +82,20 @@ def train_model(username):
     X, y = df[["start_hour", "weather_score", "traffic_score"]], df["earnings"]
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X, y)
-    joblib.dump(model, f"{username}_predictor.pkl")
+    joblib.dump(model, "earnings_predictor.pkl")
     return "✅ AI model trained successfully!"
 
 # Predict best time to drive
-def predict_best_time(username):
+def predict_best_time():
     try:
-        model = joblib.load(f"{username}_predictor.pkl")
+        model = joblib.load("earnings_predictor.pkl")
     except FileNotFoundError:
         return "❌ AI model not trained yet. Log more shifts first."
 
-    hours = list(range(10, 23))
+    hours = list(range(10, 23))  # Predict from 10 AM to 11 PM
     weather, temp, wind = get_weather()
     traffic = get_traffic()
+
     predictions = [(hour, model.predict([[hour, 1 if "rain" in weather.lower() else 0, 1 if traffic > 20 else 0]])[0]) for hour in hours]
 
     return max(predictions, key=lambda x: x[1])
@@ -149,48 +104,16 @@ def predict_best_time(username):
 st.title("🚗 DoorDash AI Driver Assistant")
 st.subheader(f"📍 Location: {CITY}, Timezone: {USER_TIMEZONE}")
 
-# Initialize database
-init_db()
+start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
+end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
+earnings = st.number_input("Total Earnings ($)", min_value=0.0)
 
-# Login/Register System
-if "username" not in st.session_state:
-    tab1, tab2 = st.tabs(["Login", "Register"])
-    
-    with tab1:
-        username = st.text_input("Username", key="login_user")
-        password = st.text_input("Password", type="password", key="login_pass")
-        if st.button("Login"):
-            success, message = login_user(username, password)
-            if success:
-                st.session_state["username"] = username
-                st.experimental_rerun()
-            else:
-                st.error(message)
-    
-    with tab2:
-        new_username = st.text_input("New Username", key="reg_user")
-        new_password = st.text_input("New Password", type="password", key="reg_pass")
-        if st.button("Register"):
-            success, message = register_user(new_username, new_password)
-            if success:
-                st.success(message)
-            else:
-                st.error(message)
+if st.button("Log Shift"):
+    save_earnings_data(start_time, end_time, earnings)
+    st.success("Shift logged successfully!")
 
-# After login
-if "username" in st.session_state:
-    st.success(f"Welcome, {st.session_state['username']}!")
+if st.button("Train AI Model"):
+    st.success(train_model())
 
-    start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
-    end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
-    earnings = st.number_input("Total Earnings ($)", min_value=0.0)
-
-    if st.button("Log Shift"):
-        save_earnings_data(st.session_state["username"], start_time, end_time, earnings)
-        st.success("Shift logged successfully!")
-
-    if st.button("Train AI Model"):
-        st.success(train_model(st.session_state["username"]))
-
-    if st.button("Check Best Time to Drive"):
-        st.success(f"📊 Best time to drive: {predict_best_time(st.session_state['username'])}")
+if st.button("Check Best Time to Drive"):
+    st.success(f"📊 Best time to drive: {predict_best_time()}")
