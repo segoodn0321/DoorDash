@@ -7,6 +7,10 @@ import pytz
 import os
 from sklearn.ensemble import RandomForestRegressor
 
+# **🔑 Replace with Your API Keys**
+HERE_API_KEY = "your_here_api_key"  # Get it from HERE Developer Portal
+OPENWEATHER_API_KEY = "your_openweather_api_key"  # Get it from OpenWeatherMap
+
 # Constants
 EARNINGS_FILE = "driver_earnings.csv"
 
@@ -14,34 +18,44 @@ EARNINGS_FILE = "driver_earnings.csv"
 st.title("🚗 DoorDash AI Driver Assistant")
 zip_code = st.text_input("Enter your ZIP code (5 digits):", max_chars=5)
 
-# **Fetch latitude & longitude using Google Maps API**
+# **Validate ZIP Code Before Making API Request**
+def is_valid_zip(zip_code):
+    return zip_code.isdigit() and len(zip_code) == 5
+
+# **Fetch latitude & longitude using HERE API**
 def get_lat_lon(zip_code):
+    if not is_valid_zip(zip_code):
+        return None, None
+
     try:
-        url = f"https://maps.googleapis.com/maps/api/geocode/json?address={zip_code},US&key=your_google_maps_api_key"
+        url = f"https://geocode.search.hereapi.com/v1/geocode?q={zip_code},US&apiKey={HERE_API_KEY}"
         response = requests.get(url).json()
-        if "results" in response and len(response["results"]) > 0:
-            location = response["results"][0]["geometry"]["location"]
+
+        if "items" in response and response["items"]:
+            location = response["items"][0]["position"]
             return location["lat"], location["lng"]
+        else:
+            st.error(f"⚠️ ZIP code lookup failed: {response.get('error', 'Unknown error')}")
     except Exception as e:
-        st.error(f"Error fetching lat/lon: {e}")
+        st.error(f"⚠️ Error fetching ZIP location: {e}")
     return None, None
 
 LATITUDE, LONGITUDE = None, None
-if zip_code and zip_code.isnumeric() and len(zip_code) == 5:
+if zip_code and is_valid_zip(zip_code):
     LATITUDE, LONGITUDE = get_lat_lon(zip_code)
     if LATITUDE and LONGITUDE:
         st.success(f"🌍 Location detected! Using ZIP code {zip_code}")
     else:
-        st.error("⚠️ Invalid ZIP code or API issue. Please check and try again.")
+        st.error("⚠️ ZIP code not found. Please check and try again.")
 
-# **Get timezone based on location**
+# **Get timezone based on location using HERE API**
 def get_timezone(lat, lon):
     try:
-        url = f"https://maps.googleapis.com/maps/api/timezone/json?location={lat},{lon}&timestamp={int(datetime.datetime.utcnow().timestamp())}&key=your_google_maps_api_key"
+        url = f"https://time.ls.hereapi.com/v1/timezone?location={lat},{lon}&apiKey={HERE_API_KEY}"
         response = requests.get(url).json()
-        return response.get("timeZoneId", "UTC")
+        return response.get("timeZone", {}).get("id", "UTC")
     except Exception as e:
-        st.error(f"Error fetching timezone: {e}")
+        st.error(f"⚠️ Error fetching timezone: {e}")
         return "UTC"
 
 # **Ensure ZIP is entered before fetching timezone**
@@ -54,21 +68,29 @@ if LATITUDE and LONGITUDE:
 # **Fetch real-time weather for user's ZIP code**
 def get_weather():
     if LATITUDE and LONGITUDE:
-        url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid=your_openweather_api_key&units=imperial"
-        response = requests.get(url).json()
-        if "weather" in response:
-            return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
+        try:
+            url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid={OPENWEATHER_API_KEY}&units=imperial"
+            response = requests.get(url).json()
+            if "weather" in response:
+                return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
+        except Exception as e:
+            st.error(f"⚠️ Weather API error: {e}")
     return "Unknown", "N/A", "N/A"
 
-# **Fetch real-time traffic for user's ZIP code**
+# **Fetch real-time traffic using HERE API**
 def get_traffic():
     if LATITUDE and LONGITUDE:
-        url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={LATITUDE},{LONGITUDE}&destinations={LATITUDE},{LONGITUDE}&departure_time=now&key=your_google_maps_api_key"
-        response = requests.get(url).json()
         try:
-            return response["rows"][0]["elements"][0]["duration_in_traffic"]["value"] / 60
-        except KeyError:
-            return "Unknown"
+            url = f"https://traffic.ls.hereapi.com/traffic/6.3/flow.json?prox={LATITUDE},{LONGITUDE},1000&apiKey={HERE_API_KEY}"
+            response = requests.get(url).json()
+
+            if "RWS" in response and len(response["RWS"]) > 0:
+                flow_items = response["RWS"][0]["RW"]
+                congestion_levels = [float(item["FIS"][0]["FI"][0]["CF"][0]["JF"]) for item in flow_items if "FIS" in item]
+                avg_congestion = sum(congestion_levels) / len(congestion_levels) if congestion_levels else "Unknown"
+                return avg_congestion
+        except Exception as e:
+            st.error(f"⚠️ Traffic API error: {e}")
     return "Unknown"
 
 # **Load earnings data**
@@ -104,7 +126,7 @@ def train_model():
 
     df["start_hour"] = pd.to_datetime(df["start_hour"], format="%I:%M %p").dt.hour
     df["weather_score"] = df["weather"].apply(lambda x: 1 if "rain" in x.lower() else 0)
-    df["traffic_score"] = df["traffic"].apply(lambda x: 1 if x > 20 else 0)
+    df["traffic_score"] = df["traffic"].apply(lambda x: 1 if x > 5 else 0)
 
     X, y = df[["start_hour", "weather_score", "traffic_score"]], df["earnings"]
     model = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -123,7 +145,7 @@ def predict_best_time():
     weather, temp, wind = get_weather()
     traffic = get_traffic()
 
-    predictions = [(hour, model.predict([[hour, 1 if "rain" in weather.lower() else 0, 1 if traffic > 20 else 0]])[0]) for hour in hours]
+    predictions = [(hour, model.predict([[hour, 1 if "rain" in weather.lower() else 0, 1 if traffic > 5 else 0]])[0]) for hour in hours]
 
     return max(predictions, key=lambda x: x[1])
 
@@ -144,3 +166,4 @@ if zip_code and LATITUDE and LONGITUDE:
 
     if st.button("Check Best Time to Drive"):
         st.success(f"📊 Best time to drive: {predict_best_time()}")
+    
