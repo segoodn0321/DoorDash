@@ -1,5 +1,7 @@
-streamlit==1.32.2
-requests==2.31.0
-PyJWT==2.8.0
+streamlit
+requests
+pandas
 joblib
+scikit-learn
 bcrypt
+pytz
