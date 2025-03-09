@@ -23,6 +23,7 @@ def get_lat_lon(zip_code):
     except:
         return None, None
 
+LATITUDE, LONGITUDE = None, None
 if zip_code:
     LATITUDE, LONGITUDE = get_lat_lon(zip_code)
     if LATITUDE and LONGITUDE:
@@ -39,23 +40,31 @@ def get_timezone(lat, lon):
     except:
         return "UTC"
 
-USER_TIMEZONE = get_timezone(LATITUDE, LONGITUDE)
+# **Ensure ZIP is entered before fetching timezone**
+USER_TIMEZONE = "UTC"
 LOCAL_TZ = pytz.timezone(USER_TIMEZONE)
+if LATITUDE and LONGITUDE:
+    USER_TIMEZONE = get_timezone(LATITUDE, LONGITUDE)
+    LOCAL_TZ = pytz.timezone(USER_TIMEZONE)
 
 # **Fetch real-time weather for user's ZIP code**
 def get_weather():
-    url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid=your_openweather_api_key&units=imperial"
-    response = requests.get(url).json()
-    return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
+    if LATITUDE and LONGITUDE:
+        url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid=your_openweather_api_key&units=imperial"
+        response = requests.get(url).json()
+        return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
+    return "Unknown", "N/A", "N/A"
 
 # **Fetch real-time traffic for user's ZIP code**
 def get_traffic():
-    url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={LATITUDE},{LONGITUDE}&destinations={LATITUDE},{LONGITUDE}&departure_time=now&key=your_google_maps_api_key"
-    response = requests.get(url).json()
-    try:
-        return response["rows"][0]["elements"][0]["duration_in_traffic"]["value"] / 60
-    except KeyError:
-        return "Unknown"
+    if LATITUDE and LONGITUDE:
+        url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={LATITUDE},{LONGITUDE}&destinations={LATITUDE},{LONGITUDE}&departure_time=now&key=your_google_maps_api_key"
+        response = requests.get(url).json()
+        try:
+            return response["rows"][0]["elements"][0]["duration_in_traffic"]["value"] / 60
+        except KeyError:
+            return "Unknown"
+    return "Unknown"
 
 # **Load earnings data**
 def load_earnings_data():
