@@ -1,85 +1,61 @@
+import streamlit as st
 import requests
 import datetime
 import pandas as pd
 import joblib
-import sys
-import subprocess
 import bcrypt
 import os
-import json
 import pytz
-
-# Auto-install missing packages
-required_libs = ["requests", "pandas", "joblib", "scikit-learn", "bcrypt", "pytz"]
-for lib in required_libs:
-    try:
-        __import__(lib)
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", lib])
-
 from sklearn.ensemble import RandomForestRegressor
 
 # File to store user credentials
 USER_CREDENTIALS_FILE = "user_credentials.json"
 
-# Load or create user credentials database
+# Load user credentials
 def load_user_credentials():
     if os.path.exists(USER_CREDENTIALS_FILE):
-        with open(USER_CREDENTIALS_FILE, "r") as file:
-            return json.load(file)
-    return {}
+        return pd.read_json(USER_CREDENTIALS_FILE, orient="index")
+    return pd.DataFrame(columns=["username", "password"])
 
-def save_user_credentials(credentials):
-    with open(USER_CREDENTIALS_FILE, "w") as file:
-        json.dump(credentials, file)
+# Save user credentials
+def save_user_credentials(credentials_df):
+    credentials_df.to_json(USER_CREDENTIALS_FILE, orient="index")
 
-# User registration
-def register_user():
-    credentials = load_user_credentials()
-    username = input("Enter a new username: ").strip()
-
-    if username in credentials:
-        print("Username already exists. Try logging in.")
-        return None
-
-    password = input("Enter a new password: ").strip()
+# Register a new user
+def register_user(username, password):
+    credentials_df = load_user_credentials()
+    
+    if username in credentials_df.index:
+        return False, "Username already exists!"
+    
     hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    credentials[username] = hashed_password
-    save_user_credentials(credentials)
+    credentials_df.loc[username] = [hashed_password]
+    save_user_credentials(credentials_df)
+    
+    return True, "Account created successfully! Please log in."
 
-    print("\n✅ Account created successfully! Please log in.")
-    return None
+# Authenticate user
+def login_user(username, password):
+    credentials_df = load_user_credentials()
+    
+    if username not in credentials_df.index:
+        return False, "Username not found. Please register first."
 
-# User login
-def login_user():
-    credentials = load_user_credentials()
-    username = input("Enter your username: ").strip()
-
-    if username not in credentials:
-        print("❌ Username not found. Please register first.")
-        return None
-
-    password = input("Enter your password: ").strip()
-    stored_hash = credentials[username].encode()
-
+    stored_hash = credentials_df.loc[username, "password"].encode()
+    
     if bcrypt.checkpw(password.encode(), stored_hash):
-        print("\n✅ Login successful!")
-        return username
-    else:
-        print("❌ Incorrect password.")
-        return None
+        return True, "Login successful!"
+    
+    return False, "Incorrect password."
 
-# Auto-detect user location and timezone using IP address
+# Auto-detect user location and timezone
+@st.cache_data
 def get_location():
-    try:
-        response = requests.get("https://ipinfo.io/json").json()
-        city = response.get("city", "Unknown City")
-        lat, lon = response["loc"].split(",")
-        timezone = response.get("timezone", "UTC")
-        return city, lat, lon, timezone
-    except Exception as e:
-        print("Error detecting location:", e)
-        sys.exit(1)
+    response = requests.get("https://ipinfo.io/json").json()
+    city = response.get("city", "Unknown City")
+    lat, lon = response["loc"].split(",")
+    timezone = response.get("timezone", "UTC")
+    return city, lat, lon, timezone
 
 CITY, LATITUDE, LONGITUDE, USER_TIMEZONE = get_location()
 LOCAL_TZ = pytz.timezone(USER_TIMEZONE)
@@ -89,23 +65,21 @@ OPENWEATHER_API_KEY = "your_openweather_api_key"
 GOOGLE_MAPS_API_KEY = "your_google_maps_api_key"
 
 # Fetch real-time weather data
+@st.cache_data
 def get_weather():
     url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid={OPENWEATHER_API_KEY}&units=imperial"
     response = requests.get(url).json()
-    return {
-        "description": response["weather"][0]["description"],
-        "temp": response["main"]["temp"],
-        "wind_speed": response["wind"]["speed"],
-    }
+    return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
 
 # Fetch real-time traffic data
+@st.cache_data
 def get_traffic():
     url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={LATITUDE},{LONGITUDE}&destinations={LATITUDE},{LONGITUDE}&departure_time=now&key={GOOGLE_MAPS_API_KEY}"
     response = requests.get(url).json()
     try:
-        return {"travel_time": response["rows"][0]["elements"][0]["duration_in_traffic"]["value"] / 60}
+        return response["rows"][0]["elements"][0]["duration_in_traffic"]["value"] / 60
     except KeyError:
-        return {"travel_time": "Unknown"}
+        return "Unknown"
 
 # Get current local time
 def get_local_time():
@@ -119,16 +93,12 @@ def load_earnings_data(username):
     return pd.DataFrame(columns=["date", "start_hour", "end_hour", "earnings", "weather", "traffic"])
 
 # Save earnings data
-def save_earnings_data(username):
+def save_earnings_data(username, start_time, end_time, earnings):
     df = load_earnings_data(username)
 
-    start_time = input("Enter shift start time (HH:MM AM/PM): ").strip()
-    end_time = input("Enter shift end time (HH:MM AM/PM): ").strip()
-    earnings = float(input("Enter total earnings for this shift ($): ").strip())
-
     date = datetime.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
-    weather = get_weather()["description"]
-    traffic = get_traffic()["travel_time"]
+    weather, temp, wind = get_weather()
+    traffic = get_traffic()
 
     new_data = pd.DataFrame([{
         "date": date,
@@ -141,14 +111,12 @@ def save_earnings_data(username):
 
     df = pd.concat([df, new_data], ignore_index=True)
     df.to_csv(f"{username}_earnings.csv", index=False)
-    print("\n✅ Earnings data saved successfully!")
 
 # Train AI model per user
 def train_model(username):
     df = load_earnings_data(username)
     if len(df) < 20:
-        print("Not enough data to train AI model yet. Keep logging shifts.")
-        return None
+        return "Not enough data to train AI model. Keep logging shifts."
 
     df["start_hour"] = pd.to_datetime(df["start_hour"], format="%I:%M %p").dt.hour
     df["weather_score"] = df["weather"].apply(lambda x: 1 if "rain" in x.lower() else 0)
@@ -158,51 +126,60 @@ def train_model(username):
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, f"{username}_predictor.pkl")
-    print("\n✅ AI model trained successfully!")
+    return "✅ AI model trained successfully!"
 
 # Predict best time to drive
 def predict_best_time(username):
     try:
         model = joblib.load(f"{username}_predictor.pkl")
     except FileNotFoundError:
-        print("AI model not trained yet. Run train_model() after logging more shifts.")
-        return None
+        return "AI model not trained yet. Log more shifts first."
 
     hours = list(range(10, 23))
-    weather, traffic = get_weather(), get_traffic()
-    predictions = [(hour, model.predict([[hour, 1 if "rain" in weather["description"].lower() else 0, 1 if traffic["travel_time"] > 20 else 0]])[0]) for hour in hours]
+    weather, temp, wind = get_weather()
+    traffic = get_traffic()
+    predictions = [(hour, model.predict([[hour, 1 if "rain" in weather.lower() else 0, 1 if traffic > 20 else 0]])[0]) for hour in hours]
 
     return max(predictions, key=lambda x: x[1])
 
-# Main menu
-def main(username):
-    while True:
-        print("\n📊 **Driver Optimization Menu** 📊")
-        print("1️⃣ Check best time to drive")
-        print("2️⃣ Log earnings for a shift")
-        print("3️⃣ Train AI model")
-        print("4️⃣ Logout")
+# Streamlit UI
+st.title("🚗 DoorDash AI Driver Assistant")
+st.subheader(f"📍 Location: {CITY}, Timezone: {USER_TIMEZONE}")
 
-        choice = input("Enter your choice: ").strip()
-        if choice == "1":
-            print(f"\n💰 Best time to drive (local time): {predict_best_time(username)}")
-        elif choice == "2":
-            save_earnings_data(username)
-        elif choice == "3":
-            train_model(username)
-        elif choice == "4":
-            break
-        else:
-            print("Invalid choice. Try again.")
-
-# User authentication
-while True:
-    action = input("\nLogin or Register? (L/R): ").strip().upper()
-    if action == "L":
-        user = login_user()
-        if user:
-            main(user)
-    elif action == "R":
-        register_user()
+# Login/Register
+username = st.text_input("Username")
+password = st.text_input("Password", type="password")
+if st.button("Login"):
+    success, message = login_user(username, password)
+    if success:
+        st.session_state["username"] = username
+        st.experimental_rerun()
     else:
-        print("Invalid input.")
+        st.error(message)
+
+if st.button("Register"):
+    success, message = register_user(username, password)
+    if success:
+        st.success(message)
+    else:
+        st.error(message)
+
+# After login
+if "username" in st.session_state:
+    st.success(f"Welcome, {st.session_state['username']}!")
+
+    # Logging earnings
+    start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
+    end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
+    earnings = st.number_input("Total Earnings ($)", min_value=0.0)
+    if st.button("Log Shift"):
+        save_earnings_data(st.session_state["username"], start_time, end_time, earnings)
+        st.success("Shift logged successfully!")
+
+    # Train AI
+    if st.button("Train AI Model"):
+        st.success(train_model(st.session_state["username"]))
+
+    # Best time prediction
+    if st.button("Check Best Time to Drive"):
+        st.success(f"📊 Best time to drive: {predict_best_time(st.session_state['username'])}")
