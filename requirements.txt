@@ -3,6 +3,4 @@ requests
 pandas
 joblib
 scikit-learn
-bcrypt
 pytz
-sqlite3
