@@ -52,10 +52,16 @@ traffic = get_traffic()
 st.write(f"🌦 **Weather:** {weather}, {temp}°F, Wind: {wind} mph")
 st.write(f"🚦 **Traffic Congestion:** {round(traffic, 2)} (Higher = More Traffic)")
 
-# **Best Driving Time Recommendation**
-st.write("✅ **Recommended Best Time to Drive:**")
-st.write("🚗 Evenings: Higher demand, fewer drivers.")
-st.write("🌧 Avoid rainy weather: Lower earnings reported.")
-st.write("⏰ Check live surge pricing for better pay.")
+# **Determine Best Strategy**
+if traffic > 7:
+    strategy = "⏰ DRIVE BY TIME - Due to heavy traffic, focus on longer shifts instead of chasing short orders."
+elif weather.lower() in ["rainy", "stormy"]:
+    strategy = "📦 DRIVE BY ORDERS - Fewer drivers work in bad weather, meaning higher-paying orders."
+else:
+    strategy = "📦 DRIVE BY ORDERS - Normal traffic & weather, maximize efficiency by taking high-value orders."
+
+# **Best Driving Strategy Recommendation**
+st.subheader("🚀 Best Driving Strategy:")
+st.write(strategy)
 
 st.info("⭐ Log earnings over time to improve AI predictions!")
