@@ -10,33 +10,47 @@ from sklearn.ensemble import RandomForestRegressor
 # Constants
 EARNINGS_FILE = "driver_earnings.csv"
 
-# **Auto-detect user’s actual location**
-def get_actual_location():
-    try:
-        response = requests.get("https://ipinfo.io/json").json()
-        city = response.get("city", "Unknown City")
-        lat, lon = response["loc"].split(",")
-        timezone = response.get("timezone", "UTC")
-        return city, lat, lon, timezone
-    except Exception:
-        return "Unknown City", "0", "0", "UTC"
+# **Ask user for ZIP Code**
+st.title("🚗 DoorDash AI Driver Assistant")
+zip_code = st.text_input("Enter your ZIP code (5 digits):", max_chars=5)
 
-CITY, LATITUDE, LONGITUDE, USER_TIMEZONE = get_actual_location()
+# **Fetch latitude & longitude based on ZIP code**
+def get_lat_lon(zip_code):
+    try:
+        url = f"http://api.openweathermap.org/geo/1.0/zip?zip={zip_code},US&appid=your_openweather_api_key"
+        response = requests.get(url).json()
+        return response["lat"], response["lon"]
+    except:
+        return None, None
+
+if zip_code:
+    LATITUDE, LONGITUDE = get_lat_lon(zip_code)
+    if LATITUDE and LONGITUDE:
+        st.success(f"🌍 Location detected! Using ZIP code {zip_code}")
+    else:
+        st.error("⚠️ Invalid ZIP code. Please try again.")
+
+# **Get timezone based on ZIP code**
+def get_timezone(lat, lon):
+    try:
+        url = f"https://maps.googleapis.com/maps/api/timezone/json?location={lat},{lon}&timestamp={int(datetime.datetime.utcnow().timestamp())}&key=your_google_maps_api_key"
+        response = requests.get(url).json()
+        return response["timeZoneId"]
+    except:
+        return "UTC"
+
+USER_TIMEZONE = get_timezone(LATITUDE, LONGITUDE)
 LOCAL_TZ = pytz.timezone(USER_TIMEZONE)
 
-# API Keys (Replace with your own)
-OPENWEATHER_API_KEY = "your_openweather_api_key"
-GOOGLE_MAPS_API_KEY = "your_google_maps_api_key"
-
-# **Fetch live weather for user’s actual location**
+# **Fetch real-time weather for user's ZIP code**
 def get_weather():
-    url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid={OPENWEATHER_API_KEY}&units=imperial"
+    url = f"http://api.openweathermap.org/data/2.5/weather?lat={LATITUDE}&lon={LONGITUDE}&appid=your_openweather_api_key&units=imperial"
     response = requests.get(url).json()
     return response["weather"][0]["description"], response["main"]["temp"], response["wind"]["speed"]
 
-# **Fetch live traffic for user’s location**
+# **Fetch real-time traffic for user's ZIP code**
 def get_traffic():
-    url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={LATITUDE},{LONGITUDE}&destinations={LATITUDE},{LONGITUDE}&departure_time=now&key={GOOGLE_MAPS_API_KEY}"
+    url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={LATITUDE},{LONGITUDE}&destinations={LATITUDE},{LONGITUDE}&departure_time=now&key=your_google_maps_api_key"
     response = requests.get(url).json()
     try:
         return response["rows"][0]["elements"][0]["duration_in_traffic"]["value"] / 60
@@ -100,19 +114,19 @@ def predict_best_time():
     return max(predictions, key=lambda x: x[1])
 
 # **Streamlit UI**
-st.title("🚗 DoorDash AI Driver Assistant")
-st.subheader(f"📍 Current Location: {CITY}, Timezone: {USER_TIMEZONE}")
+if zip_code and LATITUDE and LONGITUDE:
+    st.subheader(f"📍 Location based on ZIP code: {zip_code}, Timezone: {USER_TIMEZONE}")
 
-start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
-end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
-earnings = st.number_input("Total Earnings ($)", min_value=0.0)
+    start_time = st.text_input("Shift Start Time (HH:MM AM/PM)")
+    end_time = st.text_input("Shift End Time (HH:MM AM/PM)")
+    earnings = st.number_input("Total Earnings ($)", min_value=0.0)
 
-if st.button("Log Shift"):
-    save_earnings_data(start_time, end_time, earnings)
-    st.success("Shift logged successfully!")
+    if st.button("Log Shift"):
+        save_earnings_data(start_time, end_time, earnings)
+        st.success("Shift logged successfully!")
 
-if st.button("Train AI Model"):
-    st.success(train_model())
+    if st.button("Train AI Model"):
+        st.success(train_model())
 
-if st.button("Check Best Time to Drive"):
-    st.success(f"📊 Best time to drive: {predict_best_time()}")
+    if st.button("Check Best Time to Drive"):
+        st.success(f"📊 Best time to drive: {predict_best_time()}")
