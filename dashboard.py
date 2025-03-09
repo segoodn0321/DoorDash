@@ -7,9 +7,10 @@ import subprocess
 import bcrypt
 import os
 import json
+import pytz
 
 # Auto-install missing packages
-required_libs = ["requests", "pandas", "joblib", "scikit-learn", "bcrypt"]
+required_libs = ["requests", "pandas", "joblib", "scikit-learn", "bcrypt", "pytz"]
 for lib in required_libs:
     try:
         __import__(lib)
@@ -68,18 +69,20 @@ def login_user():
         print("❌ Incorrect password.")
         return None
 
-# Auto-detect user location using IP address
+# Auto-detect user location and timezone using IP address
 def get_location():
     try:
         response = requests.get("https://ipinfo.io/json").json()
         city = response.get("city", "Unknown City")
         lat, lon = response["loc"].split(",")
-        return city, lat, lon
+        timezone = response.get("timezone", "UTC")
+        return city, lat, lon, timezone
     except Exception as e:
         print("Error detecting location:", e)
         sys.exit(1)
 
-CITY, LATITUDE, LONGITUDE = get_location()
+CITY, LATITUDE, LONGITUDE, USER_TIMEZONE = get_location()
+LOCAL_TZ = pytz.timezone(USER_TIMEZONE)
 
 # API Keys (Replace with your own)
 OPENWEATHER_API_KEY = "your_openweather_api_key"
@@ -104,6 +107,10 @@ def get_traffic():
     except KeyError:
         return {"travel_time": "Unknown"}
 
+# Get current local time
+def get_local_time():
+    return datetime.datetime.now(LOCAL_TZ).strftime("%I:%M %p")
+
 # Load user-specific earnings data
 def load_earnings_data(username):
     file_path = f"{username}_earnings.csv"
@@ -119,7 +126,7 @@ def save_earnings_data(username):
     end_time = input("Enter shift end time (HH:MM AM/PM): ").strip()
     earnings = float(input("Enter total earnings for this shift ($): ").strip())
 
-    date = datetime.datetime.today().strftime("%Y-%m-%d")
+    date = datetime.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     weather = get_weather()["description"]
     traffic = get_traffic()["travel_time"]
 
@@ -178,7 +185,7 @@ def main(username):
 
         choice = input("Enter your choice: ").strip()
         if choice == "1":
-            print(f"\n💰 Best time to drive: {predict_best_time(username)}")
+            print(f"\n💰 Best time to drive (local time): {predict_best_time(username)}")
         elif choice == "2":
             save_earnings_data(username)
         elif choice == "3":
@@ -199,4 +206,3 @@ while True:
         register_user()
     else:
         print("Invalid input.")
-        
