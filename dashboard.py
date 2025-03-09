@@ -10,11 +10,11 @@ from sklearn.ensemble import RandomForestRegressor
 # Constants
 EARNINGS_FILE = "driver_earnings.csv"
 
-# **Ask user for ZIP Code**
+# **User enters ZIP Code**
 st.title("🚗 DoorDash AI Driver Assistant")
 zip_code = st.text_input("Enter your ZIP code (5 digits):", max_chars=5)
 
-# **Fetch latitude & longitude using Google Maps API (more reliable)**
+# **Fetch latitude & longitude using Google Maps API**
 def get_lat_lon(zip_code):
     try:
         url = f"https://maps.googleapis.com/maps/api/geocode/json?address={zip_code},US&key=your_google_maps_api_key"
@@ -23,24 +23,25 @@ def get_lat_lon(zip_code):
             location = response["results"][0]["geometry"]["location"]
             return location["lat"], location["lng"]
     except Exception as e:
-        print("Error fetching lat/lon:", e)
+        st.error(f"Error fetching lat/lon: {e}")
     return None, None
 
 LATITUDE, LONGITUDE = None, None
-if zip_code:
+if zip_code and zip_code.isnumeric() and len(zip_code) == 5:
     LATITUDE, LONGITUDE = get_lat_lon(zip_code)
     if LATITUDE and LONGITUDE:
         st.success(f"🌍 Location detected! Using ZIP code {zip_code}")
     else:
-        st.error("⚠️ Invalid ZIP code or API issue. Please try again.")
+        st.error("⚠️ Invalid ZIP code or API issue. Please check and try again.")
 
-# **Get timezone based on ZIP code**
+# **Get timezone based on location**
 def get_timezone(lat, lon):
     try:
         url = f"https://maps.googleapis.com/maps/api/timezone/json?location={lat},{lon}&timestamp={int(datetime.datetime.utcnow().timestamp())}&key=your_google_maps_api_key"
         response = requests.get(url).json()
         return response.get("timeZoneId", "UTC")
-    except:
+    except Exception as e:
+        st.error(f"Error fetching timezone: {e}")
         return "UTC"
 
 # **Ensure ZIP is entered before fetching timezone**
